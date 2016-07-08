@@ -69,3 +69,37 @@ class Edit extends \Magento\Backend\App\Action {
 	}
 
 }
+
+<?php
+$_config = $this->getManufacturerConfig();
+$manu_img = $this->getManufacturerImage();
+$pageType = $this->getPageType();
+
+switch ($pageType) {
+	case 'listpage':
+		$image_dimension = explode('x',$_config->getCurrentStoreConfigValue('manufacturer/manufacturer_brand_list/manufacturer_list_dimension'));
+		break;
+	case 'productpage' : 
+		$image_dimension = explode('x',$_config->getCurrentStoreConfigValue('manufacturer/manufacturer_brand_list/manufacturer_list_dimension'));
+		break;
+	case 'sidebarpage' : 
+		$image_dimension = explode('x',$_config->getCurrentStoreConfigValue('manufacturer/manufacturer_brand_list/manufacturer_list_dimension'));
+		break;
+	break;
+	default:
+		$image_dimension = array(300,300);
+		break;
+}
+	
+
+$manufacturer_name = $this->getManufacturerName();
+/*$replace = array("'");
+$new_manufacturer_name = $new_manufacturer_name = str_replace($replace,"_",$manufacturer_name);*/
+
+?>
+<span class="product-image-container" style="width:<?php echo $image_dimension[0]?>;">
+	<span class="product-image-container">
+		
+		<img src="<?php echo $manu_img ?>" alt="<?php echo $manufacturer_name; ?>" width="<?php echo $image_dimension[0]; ?>" height="<?php echo $image_dimension[1]; ?>" class="manufacturer_image" title="<?php echo $manufacturer_name; ?>" />
+	</span>
+</span>
