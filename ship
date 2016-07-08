@@ -1,169 +1,71 @@
 <?php
-/**
- * Magento
- *
- * NOTICE OF LICENSE
- *
- * This source file is subject to the Open Software License (OSL 3.0)
- * that is bundled with this package in the file LICENSE.txt.
- * It is also available through the world-wide-web at this URL:
- * http://opensource.org/licenses/osl-3.0.php
- * If you did not receive a copy of the license and are unable to
- * obtain it through the world-wide-web, please send an email
- * to license@magento.com so we can send you a copy immediately.
- *
- * DISCLAIMER
- *
- * Do not edit or add to this file if you wish to upgrade Magento to newer
- * versions in the future. If you wish to customize Magento for your
- * needs please refer to http://www.magento.com for more information.
- *
- * @category    Mage
- * @package     Mage_Shipping
- * @copyright  Copyright (c) 2006-2016 X.commerce, Inc. and affiliates (http://www.magento.com)
- * @license    http://opensource.org/licenses/osl-3.0.php  Open Software License (OSL 3.0)
- */
 
+namespace Biztech\Manufacturer\Controller\Adminhtml\Manufacturer;
 
-/**
- * Flat rate shipping model
- *
- * @category   Mage
- * @package    Mage_Shipping
- * @author      Magento Core Team <core@magentocommerce.com>
- */
-class Mage_Shipping_Model_Carrier_Flatrate
-extends Mage_Shipping_Model_Carrier_Abstract
-implements Mage_Shipping_Model_Carrier_Interface
-{
+class Edit extends \Magento\Backend\App\Action {
 
-    protected $_code = 'flatrate';
-    protected $_isFixed = true;
+	protected $_manufacturerModel;
+	protected $_manufacturertextModel;
+	protected $_coreRegistry = null;
+	protected $resultPageFactory;
 
-    /**
-     * Enter description here...
-     *
-     * @param Mage_Shipping_Model_Rate_Request $data
-     * @return Mage_Shipping_Model_Rate_Result
-     */
-    public function collectRates(Mage_Shipping_Model_Rate_Request $request)
-    {
-        if (!$this->getConfigFlag('active')) {
-            return false;
-        }
-        $packageHeight = 0;
-        $packageLength = 0;
-        $freeBoxes = 0;
-        if ($request->getAllItems()) {
-            foreach ($request->getAllItems() as $item) {
+	public function __construct(
+		\Magento\Backend\App\Action\Context $context,
+		\Biztech\Manufacturer\Model\Manufacturer $manufacturerModel,
+		\Biztech\Manufacturer\Model\Manufacturertext $manufacturertextModel,
+		\Magento\Framework\View\Result\PageFactory $resultPageFactory,
+		\Magento\Framework\Registry $registry
+	) {
+		$this->_manufacturerModel     = $manufacturerModel;
+		$this->_manufacturertextModel = $manufacturertextModel;
+		$this->resultPageFactory      = $resultPageFactory;
+		$this->_coreRegistry          = $registry;
+		parent::__construct($context);
+	}
+	/**
+	 * @var \Magento\Framework\View\Result\PageFactory
+	 */
+	public function execute() {
 
-                if ($item->getProduct()->isVirtual() || $item->getParentItem()) {
-                    continue;
-                }
-                if ($item->getHasChildren() && $item->isShipSeparately()) {
-                    foreach ($item->getChildren() as $child) {
+		$store = $this->getRequest()->getParam('store', 0);
+		$id    = $this->getRequest()->getParam('manufacturer_id');
+		$model = $this->_manufacturerModel;
+		if ($id) {
+			$model->load($id);
+			if (!$model->getId()) {
+				$this->messageManager->addError(__('Manufacturer No Longer Exists'));
+				$resultRedirect = $this->resultRedirectFactory->create();
+				$this->_redirect('*/*/', array('store' => $store));
+				return $resultRedirect->setPath('*/*/');
+			}
+		}
+		$model->load($id);
+		$modelText = $this->_manufacturertextModel->getCollection()
+		                  ->addFieldToFilter('store_id', $store)
+		                  ->addFieldToFilter('manufacturer_id', $model->getManufacturerId());
 
-                        if ($child->getFreeShipping() && !$child->getProduct()->isVirtual()) {
-                            $freeBoxes += $item->getQty() * $child->getQty();
-                        }
-                    }
-                } elseif ($item->getFreeShipping()) {
-                    $freeBoxes += $item->getQty();
-                } else {
-                    // var_dump($item->getQty());
-                    $productId = $item->getProduct()->getEntityId();
-                    $l = (int) Mage::getResourceModel('catalog/product')->getAttributeRawValue($productId, 'length', '0');
-                    $w = (int) Mage::getResourceModel('catalog/product')->getAttributeRawValue($productId, 'width', '0');
-                    $h = (int) Mage::getResourceModel('catalog/product')->getAttributeRawValue($productId, 'height', '0');
-                    if( $packageHeight < $h ){
+		$data = $this->_getSession()->getFormData(true);
+		if (!empty($data)) {
+			$model->setData($data);
+			if ($modelText->count()) {
+				$modelText->setData($data);
+			}
+		}
+		if ($modelText->count()) {
+			$model_text = $modelText->getData();
+			$text_data  = $model_text[0];
+		} else {
+			$text_data = array();
+		}
+		$model->addData($text_data);
 
-                        $packageHeight = $h;
-                    }
-                    if( $packageLength < $l ){
+		$this->_coreRegistry->register('manufacturer_grid', $model);
 
-                        $packageLength = $l;
-                    }
-                    for ($i = 1; $i <= $item->getQty(); $i++){
-                        $boxes[] = [
-                        'length' => $l,
-                        'width' => $w,
-                        'height' => $h
-                        ];
-                    }
-                    
-                    
-                    $max[$productId] = array(
-                        'length' => $l * $item->getQty(),
-                        'height' => $h * $item->getQty()
-                        );
+		$this->_view->loadLayout();
 
-                    
-                }
-            }
-            // var_dump($max);
-            $flag = 0;
-            foreach ($max as $key => $value) {
-                $l += $value['length'];
-                $h += $value['height'];
-            }
+		$this->_view->getLayout()->initMessages();
+		$this->_view->renderLayout();
 
-            if( $l > 105 && $h > 105 ){
-                $flag = 0;
-            } else if( $h > 105 ){
-                foreach ($boxes as $key => $value) {
-                    $box[] = array(
-                        'length' => $value['length'],
-                        'width' => $value['width'],
-                        'height' => $packageHeight
-                    );
-                   
-                }
-            } else if( $l > 105 ){
-                echo 'bindec(binary_string)';
-            }
-
-            var_dump($box);
-            
-        }
-        $this->setFreeBoxes($freeBoxes);
-
-        $result = Mage::getModel('shipping/rate_result');
-        if ($this->getConfigData('type') == 'O') { // per order
-            $shippingPrice = $this->getConfigData('price');
-        } elseif ($this->getConfigData('type') == 'I') { // per item
-            $shippingPrice = ($request->getPackageQty() * $this->getConfigData('price')) - ($this->getFreeBoxes() * $this->getConfigData('price'));
-        } else {
-            $shippingPrice = false;
-        }
-
-        $shippingPrice = $this->getFinalPriceWithHandlingFee($shippingPrice);
-
-        if ($shippingPrice !== false) {
-            $method = Mage::getModel('shipping/rate_result_method');
-
-            $method->setCarrier('flatrate');
-            $method->setCarrierTitle($this->getConfigData('title'));
-
-            $method->setMethod('flatrate');
-            $method->setMethodTitle($this->getConfigData('name'));
-
-            if ($request->getFreeShipping() === true || $request->getPackageQty() == $this->getFreeBoxes()) {
-                $shippingPrice = '0.00';
-            }
-
-
-            $method->setPrice($shippingPrice);
-            $method->setCost($shippingPrice);
-
-            $result->append($method);
-        }
-
-        return $result;
-    }
-    
-    public function getAllowedMethods()
-    {
-        return array('flatrate'=>$this->getConfigData('name'));
-    }
+	}
 
 }
